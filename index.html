@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frontier Earth – an Alaska-born city sim</title>
+<style>
+body{margin:0;background:#0b1520;color:#dfe9f3;font:14px system-ui,sans-serif;display:flex;flex-direction:column;align-items:center}
+h1{font-size:18px;margin:8px}
+#hud{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:4px}
+#hud span{background:#16283a;padding:4px 8px;border-radius:4px}
+#main{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+canvas{background:#000;border:2px solid #345;cursor:crosshair;max-width:96vw}
+#side{width:290px}
+button{display:block;width:100%;margin:3px 0;padding:6px;background:#1d3a55;color:#fff;border:1px solid #456;border-radius:4px;cursor:pointer;text-align:left}
+button:hover:not(:disabled){background:#2a5a85}button:disabled{opacity:.4;cursor:default}button.sel{outline:2px solid #ffd54a}
+#log{height:120px;overflow:auto;background:#08111a;padding:4px;font-size:12px;margin-top:6px}
+h3{margin:8px 0 2px;font-size:13px;color:#8cc}
+</style></head><body>
+<h1>Frontier Earth — start in Alaska, then take what you learn to the rest of the planet</h1>
+<div id="hud"></div>
+<div id="main"><canvas id="c" width="720" height="480"></canvas>
+<div id="side"><h3>Build (left-click place, right-click demolish)</h3><div id="build"></div><h3>Research (needs a Lab)</h3><div id="tech"></div><h3>Expeditions</h3><div id="loc"></div><div id="log"></div></div></div>
+<script>
+const W=24,H=16,T=30,cv=document.getElementById('c'),g=cv.getContext('2d');
+// Locations: temp °C, solar/wind 0-1 energy potential, rain 0-1 (crop water), hs = hazard severity
+const LOCS={
+ alaska:{n:'Alaska (Fairbanks)',temp:-8,solar:.25,wind:.4,rain:.4,haz:'thaw',hs:.5,bg:'#cfe3ee',note:'Cold: heating dominates; permafrost thaws as the world warms.'},
+ netherlands:{n:'Netherlands',temp:10,solar:.4,wind:.8,rain:.8,haz:'flood',hs:.7,bg:'#8fc27a',note:'Below sea level: strong wind, storm surges. Build shields.'},
+ sahara:{n:'Sahara',temp:30,solar:1,wind:.3,rain:.02,haz:'heat',hs:.7,bg:'#e2c275',note:'Huge solar, no water, deadly heat (cooling load). Hydroponics helps.'},
+ himalaya:{n:'Himalaya',temp:-2,solar:.6,wind:.6,rain:.5,haz:'quake',hs:.9,bg:'#b9c3cf',note:'Big earthquakes and avalanches. Resilient engineering matters.'},
+ atoll:{n:'Pacific Atoll',temp:27,solar:.8,wind:.6,rain:.7,haz:'surge',hs:.8,bg:'#6fd0c8',note:'Sea-level rise & cyclones threaten everything.'}};
+const LORDER=['alaska','netherlands','sahara','himalaya','atoll'];
+const COST={house:20,farm:30,power:50,mine:40,lab:80,wall:25};
+const NAMES={house:'House',farm:'Greenhouse/Farm',power:'Power plant (solar/wind/geo)',mine:'Industry/Mine (income, warms planet)',lab:'Research Lab',wall:'Hazard Shield'};
+const ICON={house:'🏠',farm:'🌱',power:'⚡',mine:'⛏',lab:'🔬',wall:'🛡'};
+const COL={house:'#f2a65a',farm:'#5fbf5f',power:'#f5e050',mine:'#8a6d5a',lab:'#b07cf0',wall:'#4a7ad0'};
+const TECH={insul:{n:'Insulation/HVAC (-40% heating & cooling)',c:30},geo:{n:'Geothermal & storage (+50% power)',c:40},
+ resil:{n:'Resilient engineering (-50% hazard damage)',c:50},hydro:{n:'Hydroponics (farms ignore climate/rain)',c:60},
+ model:{n:'Earth Physics Model (unlocks expeditions)',c:25}};
+let S,sel='house';
+function log(m){const l=document.getElementById('log');l.innerHTML=m+'<br>'+l.innerHTML}
+function blank(){return Array.from({length:H},()=>Array(W).fill(null))}
+function newColony(loc,keep){
+ S=keep?{...keep,loc,grid:blank(),pop:0}:{loc,grid:blank(),money:300,sci:0,pop:0,climate:0,year:0,tech:{},score:0,visited:{}};
+ S.visited[loc]=1;log('Colony founded: '+LOCS[loc].n+'. '+LOCS[loc].note)}
+function count(t){let n=0;for(const r of S.grid)for(const c of r)if(c===t)n++;return n}
+function stats(){const L=LOCS[S.loc],T0=L.temp+S.climate,k=S.tech.insul?.6:1;
+ const houses=count('house'),pw=count('power'),farms=count('farm'),mines=count('mine'),labs=count('lab'),walls=count('wall');
+ // heat loss ∝ (setpoint - outside T); cooling load ∝ (T - 26)
+ const heat=Math.max(0,20-T0)*.12*houses*k,cool=Math.max(0,T0-26)*.25*houses*k;
+ const demand=houses+mines*2+labs*2+heat+cool+farms*(S.tech.hydro?1.5:0);
+ const out=pw*(6+L.solar*10+L.wind*8)*(S.tech.geo?1.5:1),ok=demand===0?1:Math.min(1,out/demand);
+ const grow=S.tech.hydro?1:Math.max(.2,1-Math.abs(T0-17)/25)*(.3+L.rain*.7);
+ const food=farms*8*grow,shield=Math.min(.8,walls/Math.max(8,houses+farms)*.8);
+ return{T0,houses,pw,farms,mines,labs,walls,demand,out,ok,food,shield,cap:houses*6}}
+function step(){const s=stats(),L=LOCS[S.loc];
+ if(s.ok>.8&&s.food>=S.pop*.5&&S.pop<s.cap)S.pop+=Math.ceil((s.cap-S.pop)*.15);
+ if(s.ok<.5||s.food<S.pop*.3)S.pop=Math.max(0,S.pop-Math.ceil(S.pop*.1));
+ S.pop=Math.min(S.pop,s.cap);
+ S.money+=S.pop*.5+s.mines*6*s.ok;S.sci+=s.labs*1.5*s.ok;
+ S.climate+=s.mines*.004+s.pw*.0005; // industry warms the planet, feeding back into hazards
+ S.year+=.1;S.score=Math.floor(S.pop*2+S.sci+count('lab')*10+Object.keys(S.visited).length*100);
+ if(Math.random()<.04+S.climate*.01){
+  const dmg=(1-s.shield)*(S.tech.resil?.5:1)*L.hs*(1+S.climate*.15),n=Math.round(dmg*4*Math.random());let lost=0;
+  for(let i=0;i<n;i++){const x=Math.random()*W|0,y=Math.random()*H|0;if(S.grid[y][x]&&S.grid[y][x]!=='wall'){S.grid[y][x]=null;lost++}}
+  const nm={thaw:'Permafrost thaw subsidence',flood:'Storm surge flood',heat:'Heat wave',quake:'Earthquake',surge:'Cyclone surge'}[L.haz];
+  if(lost)log('⚠ '+nm+' destroyed '+lost+' buildings.')}
+ render()}
+function render(){const L=LOCS[S.loc],s=stats();g.fillStyle=L.bg;g.fillRect(0,0,cv.width,cv.height);
+ g.font='18px sans-serif';
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){g.strokeStyle='rgba(0,0,0,.12)';g.strokeRect(x*T,y*T,T,T);const c=S.grid[y][x];
+  if(c){g.fillStyle=COL[c];g.fillRect(x*T+2,y*T+2,T-4,T-4);g.fillStyle='#000';g.fillText(ICON[c],x*T+5,y*T+22)}}
+ document.getElementById('hud').innerHTML=
+ `<span>📍 ${L.n}</span><span>🌡 ${s.T0.toFixed(1)}°C (+${S.climate.toFixed(2)})</span><span>💰 ${S.money|0}</span><span>🔬 ${S.sci|0}</span><span>👥 ${S.pop}/${s.cap}</span><span>⚡ ${s.out.toFixed(0)}/${s.demand.toFixed(0)}</span><span>🌾 ${s.food.toFixed(0)}</span><span>🛡 ${(s.shield*100)|0}%</span><span>⭐ ${S.score}</span>`;
+ const b=document.getElementById('build');
+ b.innerHTML=Object.keys(COST).map(k=>`<button data-k="${k}" class="${k===sel?'sel':''}">${ICON[k]} ${NAMES[k]} — $${COST[k]}</button>`).join('');
+ const labs=s.labs,t=document.getElementById('tech');
+ t.innerHTML=Object.entries(TECH).map(([k,v])=>`<button data-t="${k}" ${S.tech[k]||S.sci<v.c||!labs?'disabled':''}>${S.tech[k]?'✔ ':''}${v.n} (${v.c}🔬)</button>`).join('');
+ const l=document.getElementById('loc');
+ l.innerHTML=LORDER.filter(k=>k!==S.loc).map(k=>{const c=S.visited[k]?100:150;return `<button data-l="${k}" ${!S.tech.model||S.money<c?'disabled':''}>Move to ${LOCS[k].n} ($${c})</button>`}).join('')+(S.tech.model?'':'<small>Research the Earth Physics Model first.</small>')}
+document.getElementById('build').onclick=e=>{if(e.target.dataset.k){sel=e.target.dataset.k;render()}};
+document.getElementById('tech').onclick=e=>{const k=e.target.dataset.t;if(k&&!S.tech[k]&&S.sci>=TECH[k].c&&count('lab')){S.sci-=TECH[k].c;S.tech[k]=1;log('Researched: '+TECH[k].n);render()}};
+document.getElementById('loc').onclick=e=>{const k=e.target.dataset.l;if(!k)return;const c=S.visited[k]?100:150;if(S.money<c)return;
+ newColony(k,{...S,money:S.money-c});render()};
+function cell(e){const r=cv.getBoundingClientRect();return[((e.clientX-r.left)*cv.width/r.width)/T|0,((e.clientY-r.top)*cv.height/r.height)/T|0]}
+cv.onclick=e=>{const[x,y]=cell(e);if(S.grid[y]===undefined||S.grid[y][x]!==null)return;
+ if(S.money>=COST[sel]){S.money-=COST[sel];S.grid[y][x]=sel}else log('Not enough money.');render()};
+cv.oncontextmenu=e=>{e.preventDefault();const[x,y]=cell(e),c=S.grid[y]&&S.grid[y][x];if(c){S.money+=COST[c]/2;S.grid[y][x]=null;render()}};
+newColony('alaska');
+log('Alaska is freezing: build power plants first, then houses and farms. Build a Lab, research the Earth Physics Model, then expand to other places.');
+render();setInterval(step,1000);
+</script></body></html>
