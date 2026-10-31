@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Palmer Bluff — Terrain Concept Lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #10191a;
+      color: #edf3ee;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; min-width: 320px; min-height: 100vh; }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 310px;
+      min-height: 100vh;
+    }
+
+    .scene { position: relative; min-height: 620px; overflow: hidden; background: #172528; }
+    canvas { display: block; width: 100%; height: 100%; min-height: 620px; touch-action: none; }
+
+    .title {
+      position: absolute;
+      top: 28px;
+      left: 32px;
+      max-width: min(520px, calc(100% - 64px));
+      pointer-events: none;
+      text-shadow: 0 2px 18px #091112;
+    }
+
+    .eyebrow, .section-label {
+      color: #a7cbb4;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 7px 0 8px; font-size: clamp(24px, 3vw, 38px); line-height: 1.05; }
+    .subtitle { margin: 0; color: #d1ded7; font-size: 13px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 16px;
+      padding: 8px 11px;
+      border: 1px solid #e8c98a70;
+      border-radius: 999px;
+      background: #172528d9;
+      color: #f0d7a4;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .04em;
+    }
+
+    .badge::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #e6bc6c;
+      content: "";
+    }
+
+    .hint {
+      position: absolute;
+      bottom: 23px;
+      left: 30px;
+      color: #c3d1ca;
+      font-size: 12px;
+      text-shadow: 0 1px 8px #000;
+      pointer-events: none;
+    }
+
+    .panel {
+      z-index: 1;
+      padding: 30px 24px;
+      border-left: 1px solid #334345;
+      background: #182224;
+    }
+
+    .panel h2 { margin: 6px 0 22px; font-size: 20px; }
+    .control { margin: 20px 0 24px; }
+    .control-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    label { color: #e3ebe5; font-size: 13px; font-weight: 600; }
+    output { color: #adc8b5; font-size: 12px; font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; margin: 14px 0 0; accent-color: #9dc8a8; }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 20px 0;
+      color: #e3ebe5;
+      font-size: 13px;
+    }
+
+    .toggle input { width: 18px; height: 18px; accent-color: #9dc8a8; }
+    .divider { height: 1px; margin: 25px 0; background: #334345; }
+    .note { color: #aab9b1; font-size: 12px; line-height: 1.55; }
+    .note strong { color: #e5d4ac; }
+    .location { margin-top: 7px; color: #c3d1ca; font-size: 12px; }
+    .legend { display: flex; align-items: center; gap: 8px; margin-top: 18px; color: #aab9b1; font-size: 11px; }
+    .legend-bar { height: 8px; flex: 1; border-radius: 99px; background: linear-gradient(90deg, #296b76, #7d9a64, #d2bd86, #e1e2d5); }
+
+    @media (max-width: 800px) {
+      .app { grid-template-columns: 1fr; }
+      .scene, canvas { min-height: 58vh; }
+      .panel { border-top: 1px solid #334345; border-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="scene" aria-label="Interactive schematic terrain model">
+      <canvas id="terrain" aria-label="Rotatable 3D-style terrain view"></canvas>
+      <div class="title">
+        <div class="eyebrow">Matanuska River valley · Palmer, Alaska</div>
+        <h1>Palmer Bluff</h1>
+        <p class="subtitle">A small interactive concept model for exploring terrain, water, and heat.</p>
+        <div class="badge">SCHEMATIC TERRAIN · NOT SURVEY DATA</div>
+      </div>
+      <div class="hint">Drag to orbit · Scroll to zoom</div>
+    </section>
+
+    <aside class="panel">
+      <div class="section-label">Concept controls</div>
+      <h2>Explore the scene</h2>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="exaggeration">Vertical exaggeration</label>
+          <output id="exaggerationValue">1.6×</output>
+        </div>
+        <input id="exaggeration" type="range" min="0.8" max="3.2" value="1.6" step="0.1">
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="heat">Illustrative heat intensity</label>
+          <output id="heatValue">35%</output>
+        </div>
+        <input id="heat" type="range" min="0" max="100" value="35">
+      </div>
+
+      <label class="toggle" for="water">
+        <span>Show water &amp; waves</span>
+        <input id="water" type="checkbox" checked>
+      </label>
+      <label class="toggle" for="heatLayer">
+        <span>Show conceptual heat field</span>
+        <input id="heatLayer" type="checkbox" checked>
+      </label>
+
+      <div class="legend"><span>Low</span><span class="legend-bar"></span><span>High</span></div>
+      <div class="divider"></div>
+      <div class="section-label">Model notes</div>
+      <p class="note"><strong>This is a schematic, not a reconstruction of actual ground.</strong> The bluff, river, and heat pattern are illustrative. No elevation raster, survey, project grading, or water-temperature data is loaded.</p>
+      <p class="note">For a site-accurate model, replace this terrain with a georeferenced DEM and obtain DOT&amp;PF existing/proposed surface files. The Alaska <a href="https://elevation.alaska.gov/" target="_blank" rel="noreferrer">DGGS Elevation Portal</a> is a starting point for checking elevation-data coverage.</p>
+      <div class="location">Concept area: Palmer / Matanuska River bluffs<br>Approximate reference: 61.6° N, 149.1° W</div>
+    </aside>
+  </main>
+
+  <script>
+    (() => {
+      const canvas = document.querySelector("#terrain");
+      const context = canvas.getContext("2d");
+      const controls = {
+        exaggeration: document.querySelector("#exaggeration"),
+        exaggerationValue: document.querySelector("#exaggerationValue"),
+        heat: document.querySelector("#heat"),
+        heatValue: document.querySelector("#heatValue"),
+        heatLayer: document.querySelector("#heatLayer"),
+        water: document.querySelector("#water")
+      };
+      const gridSize = 58;
+      const points = [];
+      let yaw = -0.72;
+      let pitch = 0.88;
+      let zoom = 1;
+      let dragging = false;
+      let previousPointer = null;
+      let frame = 0;
+      let width = 0;
+      let height = 0;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+      function terrainHeight(x, y) {
+        const bluffEdge = 0.05 + 0.075 * Math.sin(x * 7.5) + 0.035 * Math.sin(x * 18);
+        const plateau = 0.48 / (1 + Math.exp(-(y - bluffEdge) * 24));
+        const riverBasin = 0.045 * Math.exp(-Math.pow((y + 0.57) / 0.19, 2));
+        const riverCut = 0.105 * Math.exp(-Math.pow((y + 0.71) / 0.105, 2));
+        const gullies = 0.025 * Math.sin(x * 16 + y * 4) * Math.max(0, y + 0.1);
+        const surface = 0.035 * Math.sin(x * 9 + y * 3) * Math.cos(y * 10);
+        return Math.max(0.035, 0.15 + plateau - riverBasin - riverCut + gullies + surface);
+      }
+
+      function buildTerrain() {
+        points.length = 0;
+        for (let row = 0; row <= gridSize; row++) {
+          const line = [];
+          const y = 1 - row / gridSize * 2;
+          for (let column = 0; column <= gridSize; column++) {
+            const x = column / gridSize * 2 - 1;
+            line.push({ x, y, z: terrainHeight(x, y) });
+          }
+          points.push(line);
+        }
+      }
+
+      function project(point) {
+        const cosYaw = Math.cos(yaw);
+        const sinYaw = Math.sin(yaw);
+        const rotatedX = cosYaw * point.x - sinYaw * point.y;
+        const rotatedY = sinYaw * point.x + cosYaw * point.y;
+        const z = point.z * Number(controls.exaggeration.value);
+        const vertical = Math.cos(pitch) * z - Math.sin(pitch) * rotatedY;
+        const depth = 4.4 + Math.cos(pitch) * rotatedY + Math.sin(pitch) * z;
+        const scale = Math.min(width, height) * 0.74 * zoom / depth;
+        return {
+          x: width * 0.51 + rotatedX * scale,
+          y: height * 0.56 - vertical * scale,
+          depth
+        };
+      }
+
+      function blendColor(base, heat, amount) {
+        if (amount <= 0) return base;
+        const warm = [230, 104, 49];
+        const mix = Math.min(0.76, heat * amount * 0.82);
+        return `rgb(${base.map((channel, index) => Math.round(channel * (1 - mix) + warm[index] * mix)).join(",")})`;
+      }
+
+      function drawFace(face) {
+        const { a, b, c, d, heat, low } = face;
+        const avg = (a.z + b.z + c.z + d.z) / 4;
+        const band = Math.max(0, Math.min(1, (avg - 0.12) / 0.51));
+        let color;
+        if (low && controls.water.checked) {
+          color = [43, 119, 137];
+        } else if (band < 0.43) {
+          color = [76 + band * 35, 115 + band * 32, 83 + band * 7];
+        } else if (band < 0.78) {
+          color = [137 + band * 35, 138 + band * 17, 103 + band * 9];
+        } else {
+          color = [192, 194, 177];
+        }
+        const heatAmount = controls.heatLayer.checked ? Number(controls.heat.value) / 100 : 0;
+        context.beginPath();
+        context.moveTo(a.screen.x, a.screen.y);
+        context.lineTo(b.screen.x, b.screen.y);
+        context.lineTo(c.screen.x, c.screen.y);
+        context.lineTo(d.screen.x, d.screen.y);
+        context.closePath();
+        context.fillStyle = blendColor(color, heat, heatAmount);
+        context.fill();
+        context.strokeStyle = low && controls.water.checked ? "#80c6d280" : "#26373138";
+        context.lineWidth = low && controls.water.checked ? 0.7 : 0.45;
+        context.stroke();
+      }
+
+      function drawWaves(time) {
+        if (!controls.water.checked) return;
+        context.save();
+        context.strokeStyle = "#bce4e777";
+        context.lineWidth = 1;
+        for (let line = 0; line < 6; line++) {
+          context.beginPath();
+          for (let step = 0; step <= 44; step++) {
+            const x = -0.84 + step / 44 * 1.68;
+            const y = -0.73 + line * 0.035;
+            const wave = 0.012 * Math.sin(x * 18 + time * 0.002 + line);
+            const screen = project({ x, y, z: 0.065 + wave });
+            if (step === 0) context.moveTo(screen.x, screen.y);
+            else context.lineTo(screen.x, screen.y);
+          }
+          context.stroke();
+        }
+        context.restore();
+      }
+
+      function render(time = 0) {
+        if (!width || !height) return;
+        context.clearRect(0, 0, width, height);
+        const gradient = context.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, "#1c3032");
+        gradient.addColorStop(1, "#293a35");
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, width, height);
+
+        const faces = [];
+        for (let row = 0; row < gridSize; row++) {
+          for (let column = 0; column < gridSize; column++) {
+            const p0 = points[row][column];
+            const p1 = points[row][column + 1];
+            const p2 = points[row + 1][column + 1];
+            const p3 = points[row + 1][column];
+            const averageDepth = (project(p0).depth + project(p1).depth + project(p2).depth + project(p3).depth) / 4;
+            const sourceDistance = Math.hypot((p0.x + p1.x + p2.x + p3.x) / 4 - 0.38, (p0.y + p1.y + p2.y + p3.y) / 4 - 0.37);
+            const face = {
+              a: p0, b: p1, c: p2, d: p3,
+              heat: Math.max(0, 1 - sourceDistance / 0.56),
+              low: (p0.y + p1.y + p2.y + p3.y) / 4 < -0.67,
+              depth: averageDepth
+            };
+            face.a.screen = project(face.a);
+            face.b.screen = project(face.b);
+            face.c.screen = project(face.c);
+            face.d.screen = project(face.d);
+            faces.push(face);
+          }
+        }
+        faces.sort((left, right) => right.depth - left.depth);
+        for (const face of faces) drawFace(face);
+        drawWaves(time);
+        frame = requestAnimationFrame(render);
+      }
+
+      function resize() {
+        const bounds = canvas.getBoundingClientRect();
+        width = bounds.width;
+        height = bounds.height;
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      controls.exaggeration.addEventListener("input", () => {
+        controls.exaggerationValue.value = `${Number(controls.exaggeration.value).toFixed(1)}×`;
+      });
+      controls.heat.addEventListener("input", () => {
+        controls.heatValue.value = `${controls.heat.value}%`;
+      });
+      canvas.addEventListener("pointerdown", event => {
+        dragging = true;
+        previousPointer = { x: event.clientX, y: event.clientY };
+        canvas.setPointerCapture(event.pointerId);
+      });
+      canvas.addEventListener("pointermove", event => {
+        if (!dragging || !previousPointer) return;
+        yaw += (event.clientX - previousPointer.x) * 0.008;
+        pitch = Math.max(0.25, Math.min(1.35, pitch + (event.clientY - previousPointer.y) * 0.006));
+        previousPointer = { x: event.clientX, y: event.clientY };
+      });
+      canvas.addEventListener("pointerup", () => { dragging = false; previousPointer = null; });
+      canvas.addEventListener("pointercancel", () => { dragging = false; previousPointer = null; });
+      canvas.addEventListener("wheel", event => {
+        event.preventDefault();
+        zoom = Math.max(0.65, Math.min(1.8, zoom * (event.deltaY < 0 ? 1.08 : 0.93)));
+      }, { passive: false });
+
+      buildTerrain();
+      resize();
+      window.addEventListener("resize", resize);
+      frame = requestAnimationFrame(render);
+      window.addEventListener("pagehide", () => cancelAnimationFrame(frame), { once: true });
+    })();
+  </script>
+</body>
+</html>
